@@ -16,6 +16,7 @@ LPCWSTR wndName = L"";
 
 
 class DibSection {
+public:
     int Width = 0;
     int Height = 0;
 
@@ -24,6 +25,12 @@ class DibSection {
     HBITMAP hBmp;
     HDC hDC;
     BITMAPINFO bmpInfo{};
+
+
+    ~DibSection() {
+        ::DeleteObject(hBmp);
+        ::DeleteDC(hDC);
+    }
 
     void Create(int width, int height) {
         bmpInfo.bmiHeader.biSize = sizeof(bmpInfo.bmiHeader);
@@ -34,12 +41,21 @@ class DibSection {
         bmpInfo.bmiHeader.biCompression = BI_RGB;
         bmpInfo.bmiHeader.biSizeImage = width * height * 4;
     
+        Width = width;
+        Height = height;
 
         HWND hwnd = GetDesktopWindow();
         HDC hscreen = ::GetDC(hwnd);
+
         hDC = ::CreateCompatibleDC(hscreen);
         
+        ReleaseDC(hwnd, hscreen);
+
         hBmp = ::CreateDIBSection(hDC, &bmpInfo, DIB_RGB_COLORS, &pData, NULL, NULL);
+    }
+
+    void SelectObject() {
+        ::SelectObject(hDC, hBmp);
     }
 };
 
@@ -56,9 +72,31 @@ int main()
 
 	SetForegroundWindow(hwnd);
 
-	CaptureWindow(hwnd, [](const void* data, int w, int h) {
-            SaveAsPNG("test.png", w, h, w * 4, data, true);
-        });
+	//CaptureWindow(hwnd, [](const void* data, int w, int h) {
+    //        SaveAsPNG("test.png", w, h, w * 4, data, true);
+    //    });
+
+    RECT rect{};
+    ::GetWindowRect(hwnd, &rect);
+    int width = rect.right - rect.left;
+    int height = rect.bottom - rect.top;
+
+    DibSection* pDibSection = new DibSection();
+
+    pDibSection->Create(width, height);
+    pDibSection->SelectObject();
+
+
+    BOOL ret = ::PrintWindow(hwnd, pDibSection->hDC, PW_RENDERFULLCONTENT);
+
+
+    int w = pDibSection->Width;
+    int h = pDibSection->Height;
+    void* data = pDibSection->pData;
+
+    SaveAsPNG("test2.png", w, h, w * 4, data, true);
+
+    delete pDibSection;
 }
 
 
