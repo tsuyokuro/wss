@@ -8,6 +8,8 @@
 #include <windows.h>
 #include <winbase.h>
 
+#include <gdiplus.h>
+
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
@@ -25,14 +27,13 @@ public:
 
     void* pData = nullptr;
 
-    HBITMAP hBmp;
-    HDC hDC;
+    HBITMAP hBitmap = 0;
+    HDC hMemDC = 0;
     BITMAPINFO bmpInfo{};
 
-
     ~DibSection() {
-        ::DeleteObject(hBmp);
-        ::DeleteDC(hDC);
+        ::DeleteObject(hBitmap);
+        ::DeleteDC(hMemDC);
     }
 
     void Create(int width, int height) {
@@ -48,17 +49,17 @@ public:
         Height = height;
 
         HWND hwnd = GetDesktopWindow();
-        HDC hscreen = ::GetDC(hwnd);
+        HDC hWindowDC = ::GetDC(hwnd);
 
-        hDC = ::CreateCompatibleDC(hscreen);
+        hMemDC = ::CreateCompatibleDC(hWindowDC);
         
-        ReleaseDC(hwnd, hscreen);
+        ReleaseDC(hwnd, hWindowDC);
 
-        hBmp = ::CreateDIBSection(hDC, &bmpInfo, DIB_RGB_COLORS, &pData, NULL, NULL);
+        hBitmap = ::CreateDIBSection(hMemDC, &bmpInfo, DIB_RGB_COLORS, &pData, NULL, NULL);
     }
 
     void SelectObject() {
-        ::SelectObject(hDC, hBmp);
+        ::SelectObject(hMemDC, hBitmap);
     }
 };
 
@@ -70,10 +71,10 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    std::string path(argv[1]);
-    path += ".png";
+    std::string savePath(argv[1]);
+    savePath += ".png";
 
-    if (IsFileExist(path.c_str())) {
+    if (IsFileExist(savePath.c_str())) {
         printf("Error: File already exists.\n");
         return 1;
     }
@@ -87,10 +88,11 @@ int main(int argc, char* argv[])
     }
 
 
-	SetForegroundWindow(hwnd);
+	//SetForegroundWindow(hwnd);
 
     RECT rect{};
     ::GetWindowRect(hwnd, &rect);
+    
     int width = rect.right - rect.left;
     int height = rect.bottom - rect.top;
 
@@ -112,7 +114,7 @@ int main(int argc, char* argv[])
     pDibSection->SelectObject();
 
 
-    BOOL ret = ::PrintWindow(hwnd, pDibSection->hDC, PW_RENDERFULLCONTENT);
+    BOOL ret = ::PrintWindow(hwnd, pDibSection->hMemDC, PW_RENDERFULLCONTENT);
 
 
     DibSection* pDibSection2 = new DibSection();
@@ -120,10 +122,10 @@ int main(int argc, char* argv[])
     pDibSection2->SelectObject();
 
     BitBlt(
-        pDibSection2->hDC,
+        pDibSection2->hMemDC,
         0, 0,
         pDibSection2->Width, pDibSection2->Height,
-        pDibSection->hDC,
+        pDibSection->hMemDC,
         trimL, trimT, SRCCOPY);
 
     int w = pDibSection2->Width;
@@ -131,13 +133,13 @@ int main(int argc, char* argv[])
     void* data = pDibSection2->pData;
 
 
-    bool writen = SaveAsPNG(path.c_str(), w, h, w * 4, data, true);
+    bool writen = SaveAsPNG(savePath.c_str(), w, h, w * 4, data, true);
 
     if (writen) {
-        printf("Save as PNG success. %s\n", path.c_str());
+        printf("Save as PNG success. %s\n", savePath.c_str());
     }
     else {
-        printf("Save as PNG failed. %s\n", path.c_str());
+        printf("Save as PNG failed. %s\n", savePath.c_str());
     }
 
     delete pDibSection;
