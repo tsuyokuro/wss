@@ -4,15 +4,15 @@
 #include <functional>
 
 #include <windows.h>
+#include <winbase.h>
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
-bool CaptureWindow(HWND hwnd, const std::function<void(const void* data, int width, int height)>& callback);
 bool SaveAsPNG(const char* path, int w, int h, int src_stride, const void* data, bool flip_y);
 
 LPCWSTR className = L"FLUTTER_RUNNER_WIN32_WINDOW";
-LPCWSTR wndName = L"";
+LPCWSTR wndName = L"base";
 
 
 class DibSection {
@@ -60,29 +60,42 @@ public:
 };
 
 
-int main()
+int main(int argc, char* argv[])
 {
-	HWND hwnd = FindWindowW(className, L"base");
+    if (argc < 2) {
+        printf("Error: No file name\n");
+        return 1;
+    }
+
+	HWND hwnd = FindWindowW(className, wndName);
 
 	if (hwnd == 0) {
-		printf("Window not found");
+		printf("Error: Window not found\n");
 		return 1;
-	}
+    }
 
 
 	SetForegroundWindow(hwnd);
-
-	//CaptureWindow(hwnd, [](const void* data, int w, int h) {
-    //        SaveAsPNG("test.png", w, h, w * 4, data, true);
-    //    });
 
     RECT rect{};
     ::GetWindowRect(hwnd, &rect);
     int width = rect.right - rect.left;
     int height = rect.bottom - rect.top;
 
-    DibSection* pDibSection = new DibSection();
 
+    int trimL = 8;
+    int trimR = 8;
+    int trimT = 0;
+    int trimB = 8;
+
+    int trimW = width - (trimL + trimR);
+    int trimH = height - (trimT + trimB);
+
+
+    printf("Window found. width:%d, height:%d\n", trimW, trimH);
+
+
+    DibSection* pDibSection = new DibSection();
     pDibSection->Create(width, height);
     pDibSection->SelectObject();
 
@@ -90,51 +103,35 @@ int main()
     BOOL ret = ::PrintWindow(hwnd, pDibSection->hDC, PW_RENDERFULLCONTENT);
 
 
-    int w = pDibSection->Width;
-    int h = pDibSection->Height;
-    void* data = pDibSection->pData;
+    DibSection* pDibSection2 = new DibSection();
+    pDibSection2->Create(trimW, trimH);
+    pDibSection2->SelectObject();
 
-    SaveAsPNG("test2.png", w, h, w * 4, data, true);
+    BitBlt(
+        pDibSection2->hDC,
+        0, 0,
+        pDibSection2->Width, pDibSection2->Height,
+        pDibSection->hDC,
+        trimL, trimT, SRCCOPY);
+
+    int w = pDibSection2->Width;
+    int h = pDibSection2->Height;
+    void* data = pDibSection2->pData;
+
+    std::string path(argv[1]);
+    path += ".png";
+
+    bool writen = SaveAsPNG(path.c_str(), w, h, w * 4, data, true);
+
+    if (writen) {
+        printf("Save as PNG success. %s\n", path.c_str());
+    }
+    else {
+        printf("Save as PNG failed. %s\n", path.c_str());
+    }
 
     delete pDibSection;
-}
-
-
-bool CaptureWindow(HWND hwnd, const std::function<void(const void* data, int width, int height)>& callback)
-{
-    RECT rect{};
-    ::GetWindowRect(hwnd, &rect);
-    int width = rect.right - rect.left;
-    int height = rect.bottom - rect.top;
-
-    BITMAPINFO info{};
-    info.bmiHeader.biSize = sizeof(info.bmiHeader);
-    info.bmiHeader.biWidth = width;
-    info.bmiHeader.biHeight = height;
-    info.bmiHeader.biPlanes = 1;
-    info.bmiHeader.biBitCount = 32;
-    info.bmiHeader.biCompression = BI_RGB;
-    info.bmiHeader.biSizeImage = width * height * 4;
-
-    bool ret = false;
-    HDC hscreen = ::GetDC(hwnd);
-    HDC hdc = ::CreateCompatibleDC(hscreen);
-    void* data = nullptr;
-    if (HBITMAP hbmp = ::CreateDIBSection(hdc, &info, DIB_RGB_COLORS, &data, NULL, NULL)) {
-        
-        ::SelectObject(hdc, hbmp);
-        
-        ::PrintWindow(hwnd, hdc, PW_RENDERFULLCONTENT);
-        
-        callback(data, width, height);
-        
-        ::DeleteObject(hbmp);
-        
-        ret = true;
-    }
-    ::DeleteDC(hdc);
-    ::ReleaseDC(hwnd, hscreen);
-    return ret;
+    delete pDibSection2;
 }
 
 bool SaveAsPNG(const char* path, int w, int h, int src_stride, const void* data, bool flip_y)
