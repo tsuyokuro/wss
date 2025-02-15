@@ -2,6 +2,8 @@
 
 #include <iostream>
 #include <functional>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 #include <windows.h>
 #include <winbase.h>
@@ -10,6 +12,7 @@
 #include "stb_image_write.h"
 
 bool SaveAsPNG(const char* path, int w, int h, int src_stride, const void* data, bool flip_y);
+bool IsFileExist(const char* name);
 
 LPCWSTR className = L"FLUTTER_RUNNER_WIN32_WINDOW";
 LPCWSTR wndName = L"base";
@@ -67,6 +70,15 @@ int main(int argc, char* argv[])
         return 1;
     }
 
+    std::string path(argv[1]);
+    path += ".png";
+
+    if (IsFileExist(path.c_str())) {
+        printf("Error: File already exists.\n");
+        return 1;
+    }
+
+
 	HWND hwnd = FindWindowW(className, wndName);
 
 	if (hwnd == 0) {
@@ -118,8 +130,6 @@ int main(int argc, char* argv[])
     int h = pDibSection2->Height;
     void* data = pDibSection2->pData;
 
-    std::string path(argv[1]);
-    path += ".png";
 
     bool writen = SaveAsPNG(path.c_str(), w, h, w * 4, data, true);
 
@@ -169,4 +179,9 @@ bool SaveAsPNG(const char* path, int w, int h, int src_stride, const void* data,
         }
     }
     return stbi_write_png(path, w, h, 4, buf.data(), dst_stride);
+}
+
+bool IsFileExist(const char* name) {
+    struct stat buffer;
+    return (stat(name, &buffer) == 0 && (buffer.st_mode & _S_IFREG));
 }
